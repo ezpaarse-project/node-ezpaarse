@@ -3,7 +3,7 @@ Node wrapper for the ezPAARSE API
 
 ## Installation
 ```bash
-npm i @ezpaarse-project/ezpaarse
+npm install -g @ezpaarse-project/ezpaarse
 ```
 
 ## Usage
