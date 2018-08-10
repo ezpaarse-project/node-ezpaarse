@@ -19,4 +19,4 @@ yargs
   .example('ezpaarse bulk ezproxy/logs/ ezproxy/results/')
   .demandCommand(1)
   .help()
-  .parse();
+  .parse(process.argv.slice(2));
