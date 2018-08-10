@@ -1,6 +1,6 @@
 {
   "name": "@ezpaarse-project/ezpaarse",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "a node wrapper for ezPAARSE",
   "main": "index.js",
   "scripts": {
