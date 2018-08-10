@@ -1,5 +1,5 @@
 {
-  "name": "ezpaarse",
+  "name": "@ezpaarse-project/ezpaarse",
   "version": "1.0.0",
   "description": "a node wrapper for ezPAARSE",
   "main": "index.js",
@@ -23,8 +23,7 @@
     "eslint-plugin-import": "^2.13.0"
   },
   "directories": {
-    "lib": "lib",
-    "bin": "bin"
+    "lib": "lib"
   },
   "repository": {
     "type": "git",
@@ -33,5 +32,8 @@
   "bugs": {
     "url": "https://github.com/ezpaarse-project/node-ezpaarse/issues"
   },
-  "homepage": "https://github.com/ezpaarse-project/node-ezpaarse#readme"
+  "homepage": "https://github.com/ezpaarse-project/node-ezpaarse#readme",
+  "bin": {
+    "ezp": "bin/ezp"
+  }
 }
