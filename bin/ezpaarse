@@ -1,0 +1,22 @@
+#!/usr/bin/env node
+
+const yargs = require('yargs');
+
+yargs
+  .env('EZPAARSE')
+  .option('h', {
+    alias: 'host',
+    describe: 'ezPAARSE server hostname (ex: demo.ezpaarse.org)',
+    global: true,
+  })
+  .option('p', {
+    alias: 'proxy',
+    describe: 'a proxy server to use',
+    global: true,
+  })
+  .commandDir('cmds')
+  .example('ezpaarse process ezproxy_2018-01.log')
+  .example('ezpaarse bulk ezproxy/logs/ ezproxy/results/')
+  .demandCommand(1)
+  .help()
+  .parse();
