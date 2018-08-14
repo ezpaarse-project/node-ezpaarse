@@ -32,8 +32,7 @@ exports.builder = yargs => yargs
   })
   .option('d', {
     alias: 'download',
-    describe: 'Download a file from the job directory',
-    array: true,
+    describe: 'Download a file from the job directory'
   })
   .option('f', {
     alias: ['force', 'overwrite'],
