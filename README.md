@@ -40,13 +40,20 @@ Let you process one or more files with an instance of ezPAARSE. If no files are 
 | --- | --- | --- |
 | -o, --out, --output     | String  | Output file |
 | -H, --header, --headers | String  | Add a header to the request (ex: "`Reject-Files: all`") |
+| -d, --download          | String  | Download a file from the job directory |
 | -v, --verbose           | Boolean | Shows detailed operations |
 | -s, --settings          | String  | Set a predefined setting |
 
 #### Examples
 ```bash
-  # Simple case
+  # Simple case, process ezproxy.log and write results to result.csv
   ezp process ezproxy.log --out result.csv
+  
+  # Same as above, and download the report file
+  ezp process ezproxy.log --out result.csv --download job-report.html
+  
+  # Download the report file with a custom path
+  ezp process ezproxy.log --out result.csv --download job-report.html:./reports/report.html
   
   # Reading from stdin and redirecting stdout to file
   cat ezproxy.log | ezp process > result.csv
