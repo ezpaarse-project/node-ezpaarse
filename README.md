@@ -59,7 +59,7 @@ Let you process one or more files with an instance of ezPAARSE. If no files are 
   cat ezproxy.log | ezp process > result.csv
 ```
 
-### ezp bulk <sourceDir> [destDir]
+### ezp bulk \<sourceDir\> [destDir]
 Process files in `sourceDir` and save results in `destDir`. If `destDir` is not provided, results will be stored in `sourceDir`, aside the source files. When processing files recursively with the `-r` option, `destDir` will mimic the structure of `sourceDir`. Files will use the same or Files with existing results are skipped, unless the `--force` flag is set. By default, the result file and the job report are downloaded, but you can get additionnal files from the job directory by using the `--download` option.
 
 #### Options
