@@ -9,7 +9,7 @@ const {
   isDir,
 } = require('../../lib/utils');
 
-const logReg = /\.(log|log\.gz|gz)$/;
+const logReg = /\.(log|log\.gz)$/;
 
 exports.command = 'bulk <sourceDir> [destDir]';
 exports.aliases = ['b'];
