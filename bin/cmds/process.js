@@ -40,7 +40,7 @@ exports.handler = async (argv) => {
   const job        = client.createJob(input, pick(argv, ['settings', 'headers']));
   const startTime  = process.hrtime();
   const outputFile = argv.output ? path.resolve(argv.output) : null;
-  const hasError   = false;
+  let hasError   = false;
 
   const { verbose } = argv;
   let response;
