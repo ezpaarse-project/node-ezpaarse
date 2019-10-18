@@ -15,7 +15,7 @@ exports.command = 'bulk <sourceDir> [destDir]';
 exports.aliases = ['b'];
 exports.desc = 'Process files from a directory and store results';
 
-exports.builder = yargs => yargs
+exports.builder = (yargs) => yargs
   .option('H', {
     alias: ['header', 'headers'],
     describe: 'Add a header to the request',
@@ -67,7 +67,7 @@ exports.handler = async (argv) => {
     process.exit(1);
   }
 
-  const files = (await findInDir(sourceDir, argv.recursive)).filter(f => logReg.test(f.name));
+  const files = (await findInDir(sourceDir, argv.recursive)).filter((f) => logReg.test(f.name));
 
   if (files.length === 0) {
     logger.info('No log files found');
@@ -75,7 +75,7 @@ exports.handler = async (argv) => {
   }
 
   if (argv.list) {
-    files.forEach(f => console.log(f.path));
+    files.forEach((f) => console.log(f.path));
     return;
   }
 
@@ -220,8 +220,8 @@ async function removeRelatedFiles(directory, filename, verbose) {
   const basename = filename.replace(logReg, '');
 
   const files = (await findInDir(directory))
-    .filter(f => f.name.startsWith(basename))
-    .filter(f => !logReg.test(f.name));
+    .filter((f) => f.name.startsWith(basename))
+    .filter((f) => !logReg.test(f.name));
 
   for (const file of files) {
     if (verbose) { logger.info(`Removing ${file.name}`); }

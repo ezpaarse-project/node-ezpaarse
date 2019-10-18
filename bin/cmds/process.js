@@ -8,11 +8,11 @@ exports.command = 'process [files..]';
 exports.aliases = ['p'];
 exports.desc = 'Process a set of files';
 
-exports.builder = yargs => yargs
+exports.builder = (yargs) => yargs
   .option('o', {
     alias: ['out', 'output'],
     describe: 'Output file',
-    coerce: file => path.resolve(file),
+    coerce: (file) => path.resolve(file),
   })
   .option('H', {
     alias: ['header', 'headers'],
@@ -40,7 +40,7 @@ exports.handler = async (argv) => {
   const job        = client.createJob(input, pick(argv, ['settings', 'headers']));
   const startTime  = process.hrtime();
   const outputFile = argv.output ? path.resolve(argv.output) : null;
-  let hasError   = false;
+  let hasError = false;
 
   const { verbose } = argv;
   let response;
@@ -81,7 +81,9 @@ exports.handler = async (argv) => {
   }
 
   if (argv.download) {
-    for (let { filename, dest } of argv.download) {
+    for (const fileDownload of argv.download) {
+      const { filename } = fileDownload;
+      let { dest } = fileDownload;
 
       if (dest) {
         dest = path.resolve(dest);
