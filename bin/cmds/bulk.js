@@ -96,8 +96,9 @@ exports.handler = async (argv) => {
   async function processFile(file) {
     const resultDir    = path.resolve(destDir, path.relative(sourceDir, path.dirname(file.path)));
     const resultFile   = path.resolve(resultDir, file.name.replace(logReg, '.ec.csv'));
-    const resultFileGz = path.resolve(resultDir, file.name.replace(logReg, '.ec.csv.gz'));
     const reportFile   = path.resolve(resultDir, file.name.replace(logReg, '.report.html'));
+    const resultFileGz = `${resultFile}.gz`;
+    const tmpFile      = `${resultFile}.tmp`;
     const koFile       = `${resultFile}.ko`;
 
     if (await fs.pathExists(resultFile) && !argv.overwrite) {
@@ -169,7 +170,7 @@ exports.handler = async (argv) => {
 
     try {
       await new Promise((resolve, reject) => {
-        response.pipe(fs.createWriteStream(resultFile))
+        response.pipe(fs.createWriteStream(tmpFile))
           .on('error', reject)
           .on('finish', resolve);
       });
@@ -179,10 +180,17 @@ exports.handler = async (argv) => {
       logger.error(`The job has been interrupted : ${e.message}`);
 
       try {
-        await fs.move(resultFile, koFile, { overwrite: true });
+        await fs.move(tmpFile, koFile, { overwrite: true });
       } catch (err) {
-        logger.warning(`Failed to rename the result file : ${err.message}`);
+        logger.error(`Failed to rename ${path.basename(tmpFile)} to .ko : ${err.message}`);
       }
+      }
+
+    try {
+      await fs.move(tmpFile, resultFile, { overwrite: true });
+    } catch (err) {
+      hasError = true;
+      logger.error(`Failed to rename ${path.basename(tmpFile)} to .csv : ${err.message}`);
     }
 
     try {
