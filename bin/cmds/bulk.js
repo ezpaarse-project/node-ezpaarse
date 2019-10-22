@@ -54,7 +54,8 @@ exports.handler = async (argv) => {
   const client      = ezpaarse.Client(pick(argv, ['host', 'proxy']));
   const sourceDir   = path.resolve(argv.sourceDir);
   const destDir     = path.resolve(argv.destDir || argv.sourceDir);
-  const { verbose } = argv;
+
+  logger.setVerbose(!!argv.verbose);
 
   let hasError = false;
 
@@ -87,9 +88,7 @@ exports.handler = async (argv) => {
 
   const elapsed = process.hrtime(startTime)[0];
 
-  if (verbose) {
-    logger.info(`Terminated in ${elapsed}s`);
-  }
+  logger.verbose(`Terminated in ${elapsed}s`);
 
   process.exit(hasError ? 1 : 0);
 
@@ -102,18 +101,18 @@ exports.handler = async (argv) => {
     const koFile       = `${resultFile}.ko`;
 
     if (await fs.pathExists(resultFile) && !argv.overwrite) {
-      if (verbose) { logger.info(`Skipping ${resultFile}`); }
+      logger.verbose(`Skipping ${resultFile}`);
       return;
     }
     if (await fs.pathExists(resultFileGz) && !argv.overwrite) {
-      if (verbose) { logger.info(`Skipping ${resultFileGz}`); }
+      logger.verbose(`Skipping ${resultFileGz}`);
       return;
     }
 
     logger.info(`Processing ${file.path}`);
 
     try {
-      await removeRelatedFiles(resultDir, file.name, verbose);
+      await removeRelatedFiles(resultDir, file.name);
     } catch (e) {
       logger.error(`Failed to remove related files : ${e.message}`);
       hasError = true;
@@ -145,9 +144,7 @@ exports.handler = async (argv) => {
       }
     }
 
-    if (verbose) {
-      logger.info(`Job started (ID: ${job.id || 'n/a'})`);
-    }
+    logger.verbose(`Job started (ID: ${job.id || 'n/a'})`);
 
     if (response.statusCode !== 200) {
       hasError = true;
@@ -160,7 +157,8 @@ exports.handler = async (argv) => {
       }
 
       try {
-        await download(job, 'job-report.html', reportFile);
+        logger.verbose(`Downloading ${path.basename(reportFile)}`);
+        await downloadFile(job, 'job-report.html', reportFile);
       } catch (e) {
         logger.error(`Failed to download report file : ${e.message}`);
       }
@@ -184,7 +182,7 @@ exports.handler = async (argv) => {
       } catch (err) {
         logger.error(`Failed to rename ${path.basename(tmpFile)} to .ko : ${err.message}`);
       }
-      }
+    }
 
     try {
       await fs.move(tmpFile, resultFile, { overwrite: true });
@@ -194,7 +192,8 @@ exports.handler = async (argv) => {
     }
 
     try {
-      await download(job, 'job-report.html', reportFile);
+      logger.verbose(`Downloading ${reportFile}`);
+      await downloadFile(job, 'job-report.html', reportFile);
     } catch (e) {
       hasError = true;
       logger.error('Failed to download report file');
@@ -206,7 +205,8 @@ exports.handler = async (argv) => {
       for (const jobFile of downloads) {
         const jobFileDest = path.resolve(resultDir, file.name.replace(logReg, `.${jobFile}`));
         try {
-          await download(job, jobFile, jobFileDest);
+          logger.verbose(`Downloading ${jobFile}`);
+          await downloadFile(job, jobFile, jobFileDest);
         } catch (e) {
           hasError = true;
           logger.error(`Failed to download ${jobFile}`);
@@ -214,9 +214,7 @@ exports.handler = async (argv) => {
       }
     }
 
-    if (verbose) {
-      logger.info('Job terminated');
-    }
+    logger.verbose('Job terminated');
   }
 };
 
@@ -224,7 +222,7 @@ exports.handler = async (argv) => {
  * Remove all files with a name based on the given log file
  * @param {string} logFile path to a log file
  */
-async function removeRelatedFiles(directory, filename, verbose) {
+async function removeRelatedFiles(directory, filename) {
   const basename = filename.replace(logReg, '');
 
   const files = (await findInDir(directory))
@@ -232,7 +230,7 @@ async function removeRelatedFiles(directory, filename, verbose) {
     .filter((f) => !logReg.test(f.name));
 
   for (const file of files) {
-    if (verbose) { logger.info(`Removing ${file.name}`); }
+    logger.verbose(`Removing ${file.name}`);
     await fs.remove(file.path);
   }
 }
@@ -243,7 +241,7 @@ async function removeRelatedFiles(directory, filename, verbose) {
  * @param {string} filename the file to download
  * @param {string} dest the place to store the file to
  */
-function download(job, filename, dest) {
+function downloadFile(job, filename, dest) {
   return new Promise((resolve, reject) => {
     if (!job.id) {
       reject(new Error('Job has no ID'));
