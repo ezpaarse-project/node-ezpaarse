@@ -4,7 +4,6 @@ const ezpaarse = require('../..');
 const logger = require('../../lib/logger')();
 const {
   coerceHeaders,
-  pick,
   findInDir,
   isDir,
 } = require('../../lib/utils');
@@ -51,9 +50,9 @@ exports.builder = (yargs) => yargs
   });
 
 exports.handler = async (argv) => {
-  const client      = ezpaarse.Client(pick(argv, ['host', 'proxy']));
-  const sourceDir   = path.resolve(argv.sourceDir);
-  const destDir     = path.resolve(argv.destDir || argv.sourceDir);
+  const client    = ezpaarse.Client({ host: argv.host, proxy: argv.proxy });
+  const sourceDir = path.resolve(argv.sourceDir);
+  const destDir   = path.resolve(argv.destDir || argv.sourceDir);
 
   logger.setVerbose(!!argv.verbose);
 
@@ -93,6 +92,7 @@ exports.handler = async (argv) => {
   process.exit(hasError ? 1 : 0);
 
   async function processFile(file) {
+    const isGzip       = /\.gz$/i.test(file.name);
     const resultDir    = path.resolve(destDir, path.relative(sourceDir, path.dirname(file.path)));
     const resultFile   = path.resolve(resultDir, file.name.replace(logReg, '.ec.csv'));
     const reportFile   = path.resolve(resultDir, file.name.replace(logReg, '.report.html'));
@@ -112,14 +112,6 @@ exports.handler = async (argv) => {
     logger.info(`Processing ${file.path}`);
 
     try {
-      await removeRelatedFiles(resultDir, file.name);
-    } catch (e) {
-      logger.error(`Failed to remove related files : ${e.message}`);
-      hasError = true;
-      return;
-    }
-
-    try {
       await fs.ensureDir(resultDir);
     } catch (e) {
       logger.error(`Failed to create ${resultDir}`);
@@ -127,30 +119,36 @@ exports.handler = async (argv) => {
       return;
     }
 
-    const job = client.createJob(fs.createReadStream(file.path), pick(argv, ['settings', 'headers']));
+    try {
+      await removeRelatedFiles(resultDir, file.name);
+    } catch (e) {
+      logger.error(`Failed to remove related files : ${e.message}`);
+      hasError = true;
+      return;
+    }
+
+    const { headers = {}, settings } = argv;
+
+    if (isGzip && !headers['content-encoding']) {
+      headers['content-encoding'] = 'gzip';
+    }
+
+    const job = client.createJob(fs.createReadStream(file.path), { headers, settings });
     let response;
 
     try {
       response = await job.start();
     } catch (e) {
-      hasError = true;
-
       if (e.code === 'ECONNREFUSED') {
         logger.error(`${e.address}:${e.port} does not respond`);
         process.exit(1);
-      } else {
-        logger.error(e.message);
-        return;
       }
-    }
 
-    logger.verbose(`Job started (ID: ${job.id || 'n/a'})`);
-
-    if (response.statusCode !== 200) {
       hasError = true;
 
-      const ezpaarseMessage = response.headers['ezpaarse-status-message'];
-      logger.error(`The job failed with status ${response.statusCode} ${response.statusMessage}`);
+      const res = e.response || {};
+      const ezpaarseMessage = res && res.headers && res.headers['ezpaarse-status-message'];
+      logger.error(`The job failed with status ${res.status || 'N/A'} ${res.statusText || 'N/A'}`);
 
       if (ezpaarseMessage) {
         logger.error(`ezPAARSE message : ${ezpaarseMessage}`);
@@ -159,44 +157,44 @@ exports.handler = async (argv) => {
       try {
         logger.verbose(`Downloading ${path.basename(reportFile)}`);
         await downloadFile(job, 'job-report.html', reportFile);
-      } catch (e) {
-        logger.error(`Failed to download report file : ${e.message}`);
+      } catch (err) {
+        logger.error(`Failed to download report file : ${err.message}`);
       }
-
       return;
     }
 
+    logger.verbose(`Job started (ID: ${job.id || 'n/a'})`);
+
     try {
       await new Promise((resolve, reject) => {
-        response.pipe(fs.createWriteStream(tmpFile))
+        response.data.pipe(fs.createWriteStream(tmpFile))
           .on('error', reject)
           .on('finish', resolve);
       });
+
+      if (!response.data.complete) {
+        throw new Error('unexpected disconnection');
+      }
     } catch (e) {
       hasError = true;
-
       logger.error(`The job has been interrupted : ${e.message}`);
+    }
 
-      try {
-        await fs.move(tmpFile, koFile, { overwrite: true });
-      } catch (err) {
-        logger.error(`Failed to rename ${path.basename(tmpFile)} to .ko : ${err.message}`);
+    try {
+      await fs.move(tmpFile, hasError ? koFile : resultFile, { overwrite: true });
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        hasError = true;
+        logger.error(`Failed to rename ${path.basename(tmpFile)} to ${hasError ? '.ko' : '.csv'} : ${err.message}`);
       }
     }
 
     try {
-      await fs.move(tmpFile, resultFile, { overwrite: true });
-    } catch (err) {
-      hasError = true;
-      logger.error(`Failed to rename ${path.basename(tmpFile)} to .csv : ${err.message}`);
-    }
-
-    try {
-      logger.verbose(`Downloading ${reportFile}`);
+      logger.verbose(`Downloading ${path.basename(reportFile)}`);
       await downloadFile(job, 'job-report.html', reportFile);
     } catch (e) {
       hasError = true;
-      logger.error('Failed to download report file');
+      logger.error(`Failed to download report file : ${e.message}`);
     }
 
     if (argv.download) {
@@ -209,7 +207,7 @@ exports.handler = async (argv) => {
           await downloadFile(job, jobFile, jobFileDest);
         } catch (e) {
           hasError = true;
-          logger.error(`Failed to download ${jobFile}`);
+          logger.error(`Failed to download ${jobFile} : ${e.message}`);
         }
       }
     }
@@ -241,14 +239,15 @@ async function removeRelatedFiles(directory, filename) {
  * @param {string} filename the file to download
  * @param {string} dest the place to store the file to
  */
-function downloadFile(job, filename, dest) {
-  return new Promise((resolve, reject) => {
-    if (!job.id) {
-      reject(new Error('Job has no ID'));
-      return;
-    }
+async function downloadFile(job, filename, dest) {
+  if (!job.id) {
+    return Promise.reject(new Error('Job has no ID'));
+  }
 
-    job.download(filename)
+  const response = await job.download(filename);
+
+  return new Promise((resolve, reject) => {
+    response.data
       .pipe(fs.createWriteStream(dest))
       .on('error', reject)
       .on('finish', resolve);
