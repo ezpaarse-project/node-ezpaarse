@@ -56,7 +56,7 @@ exports.handler = async (argv) => {
 
   logger.setVerbose(!!argv.verbose);
 
-  let hasError = false;
+  let processHasError = false;
 
   if (!await isDir(sourceDir)) {
     logger.error(`Not a directory: ${sourceDir}`);
@@ -89,7 +89,7 @@ exports.handler = async (argv) => {
 
   logger.verbose(`Terminated in ${elapsed}s`);
 
-  process.exit(hasError ? 1 : 0);
+  process.exit(processHasError ? 1 : 0);
 
   async function processFile(file) {
     const isGzip       = /\.gz$/i.test(file.name);
@@ -115,7 +115,7 @@ exports.handler = async (argv) => {
       await fs.ensureDir(resultDir);
     } catch (e) {
       logger.error(`Failed to create ${resultDir}`);
-      hasError = true;
+      processHasError = true;
       return;
     }
 
@@ -123,7 +123,7 @@ exports.handler = async (argv) => {
       await removeRelatedFiles(resultDir, file.name);
     } catch (e) {
       logger.error(`Failed to remove related files : ${e.message}`);
-      hasError = true;
+      processHasError = true;
       return;
     }
 
@@ -144,7 +144,7 @@ exports.handler = async (argv) => {
         process.exit(1);
       }
 
-      hasError = true;
+      processHasError = true;
 
       const res = e.response || {};
       const ezpaarseMessage = res && res.headers && res.headers['ezpaarse-status-message'];
@@ -165,35 +165,39 @@ exports.handler = async (argv) => {
 
     logger.verbose(`Job started (ID: ${job.id || 'n/a'})`);
 
+    let lineCount = 0;
+    let jobHasError = false;
+
     try {
       await new Promise((resolve, reject) => {
         response.data.pipe(fs.createWriteStream(tmpFile))
           .on('error', reject)
           .on('finish', resolve);
+
+        let buffer = '';
+        response.data.on('data', (chunk) => {
+          buffer += chunk.toString();
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop();
+          lineCount += lines.filter((l) => l.trim()).length;
+        });
       });
 
       if (!response.data.complete) {
         throw new Error('unexpected disconnection');
       }
     } catch (e) {
-      hasError = true;
+      processHasError = true;
+      jobHasError = true;
       logger.error(`The job has been interrupted : ${e.message}`);
-    }
-
-    try {
-      await fs.move(tmpFile, hasError ? koFile : resultFile, { overwrite: true });
-    } catch (err) {
-      if (err.code !== 'ENOENT') {
-        hasError = true;
-        logger.error(`Failed to rename ${path.basename(tmpFile)} to ${hasError ? '.ko' : '.csv'} : ${err.message}`);
-      }
     }
 
     try {
       logger.verbose(`Downloading ${path.basename(reportFile)}`);
       await downloadFile(job, 'job-report.json', reportFile);
     } catch (e) {
-      hasError = true;
+      processHasError = true;
+      jobHasError = true;
       logger.error(`Failed to download report file : ${e.message}`);
     }
 
@@ -203,15 +207,27 @@ exports.handler = async (argv) => {
     try {
       report = JSON.parse(await fs.readFile(reportFile, 'utf8'));
     } catch (e) {
-      hasError = true;
+      processHasError = true;
+      jobHasError = true;
       logger.error(`Cannot read ${path.basename(reportFile)} : ${e.message}`);
     }
 
     if (report) {
       const error = validateReport(report);
+
       if (error) {
-        hasError = true;
+        processHasError = true;
+        jobHasError = true;
         logger.error(`Report validation failed : ${error.message}`);
+      } else {
+        const ecCount = report.general['nb-ecs'];
+
+        // Compare EC count with line count (without header line)
+        if ((lineCount - 1) !== ecCount) {
+          processHasError = true;
+          jobHasError = true;
+          logger.error(`File length (${lineCount} lines) does not match job report (${ecCount} ECs)`);
+        }
       }
     }
 
@@ -224,9 +240,19 @@ exports.handler = async (argv) => {
           logger.verbose(`Downloading ${jobFile}`);
           await downloadFile(job, jobFile, jobFileDest);
         } catch (e) {
-          hasError = true;
+          processHasError = true;
+          jobHasError = true;
           logger.error(`Failed to download ${jobFile} : ${e.message}`);
         }
+      }
+    }
+
+    try {
+      await fs.move(tmpFile, jobHasError ? koFile : resultFile, { overwrite: true });
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        processHasError = true;
+        logger.error(`Failed to rename ${path.basename(tmpFile)} to ${processHasError ? '.ko' : '.csv'} : ${err.message}`);
       }
     }
 
