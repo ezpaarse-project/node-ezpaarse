@@ -197,6 +197,24 @@ exports.handler = async (argv) => {
       logger.error(`Failed to download report file : ${e.message}`);
     }
 
+    logger.verbose('Validating report file');
+
+    let report;
+    try {
+      report = JSON.parse(await fs.readFile(reportFile, 'utf8'));
+    } catch (e) {
+      hasError = true;
+      logger.error(`Cannot read ${path.basename(reportFile)} : ${e.message}`);
+    }
+
+    if (report) {
+      const error = validateReport(report);
+      if (error) {
+        hasError = true;
+        logger.error(`Report validation failed : ${error.message}`);
+      }
+    }
+
     if (argv.download) {
       const downloads = Array.isArray(argv.download) ? argv.download : [argv.download];
 
@@ -231,6 +249,23 @@ async function removeRelatedFiles(directory, filename) {
     logger.verbose(`Removing ${file.name}`);
     await fs.remove(file.path);
   }
+}
+
+/**
+ * Validate a report,
+ * @param {Object} report
+ */
+function validateReport(report) {
+  if (!report.general) {
+    return new Error('general section is missing');
+  }
+  if (report.general['Job-Done'] !== true) {
+    return new Error('invalid Job-Done value, the job may have been interrupted');
+  }
+  if (Number.isNaN(parseInt(report.general['nb-ecs'], 10))) {
+    return new Error('nb-ecs is either missing or is not a number');
+  }
+  return null;
 }
 
 /**
