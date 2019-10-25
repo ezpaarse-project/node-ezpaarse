@@ -95,7 +95,7 @@ exports.handler = async (argv) => {
     const isGzip       = /\.gz$/i.test(file.name);
     const resultDir    = path.resolve(destDir, path.relative(sourceDir, path.dirname(file.path)));
     const resultFile   = path.resolve(resultDir, file.name.replace(logReg, '.ec.csv'));
-    const reportFile   = path.resolve(resultDir, file.name.replace(logReg, '.report.html'));
+    const reportFile   = path.resolve(resultDir, file.name.replace(logReg, '.report.json'));
     const resultFileGz = `${resultFile}.gz`;
     const tmpFile      = `${resultFile}.tmp`;
     const koFile       = `${resultFile}.ko`;
@@ -156,7 +156,7 @@ exports.handler = async (argv) => {
 
       try {
         logger.verbose(`Downloading ${path.basename(reportFile)}`);
-        await downloadFile(job, 'job-report.html', reportFile);
+        await downloadFile(job, 'job-report.json', reportFile);
       } catch (err) {
         logger.error(`Failed to download report file : ${err.message}`);
       }
@@ -191,7 +191,7 @@ exports.handler = async (argv) => {
 
     try {
       logger.verbose(`Downloading ${path.basename(reportFile)}`);
-      await downloadFile(job, 'job-report.html', reportFile);
+      await downloadFile(job, 'job-report.json', reportFile);
     } catch (e) {
       hasError = true;
       logger.error(`Failed to download report file : ${e.message}`);
