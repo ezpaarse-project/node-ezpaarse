@@ -4,13 +4,14 @@ const yargs = require('yargs');
 
 yargs
   .env('EZPAARSE')
-  .option('h', {
-    alias: 'host',
+  .completion()
+  .option('host', {
+    alias: 'h',
     describe: 'ezPAARSE server hostname (ex: demo.ezpaarse.org)',
     global: true,
   })
-  .option('p', {
-    alias: 'proxy',
+  .option('proxy', {
+    alias: 'p',
     describe: 'a proxy server to use',
     global: true,
   })

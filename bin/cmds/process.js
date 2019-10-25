@@ -9,28 +9,28 @@ exports.aliases = ['p'];
 exports.desc = 'Process a set of files';
 
 exports.builder = (yargs) => yargs
-  .option('o', {
-    alias: ['out', 'output'],
+  .option('output', {
+    alias: ['out', 'o'],
     describe: 'Output file',
     coerce: (file) => path.resolve(file),
   })
-  .option('H', {
-    alias: ['header', 'headers'],
+  .option('header', {
+    alias: ['headers', 'H'],
     describe: 'Add a header to the request',
     coerce: coerceHeaders,
   })
-  .option('d', {
-    alias: 'download',
+  .option('download', {
+    alias: 'd',
     describe: 'Download a file from the job directory',
     coerce: coerceDownloads,
   })
-  .option('v', {
-    alias: ['verbose'],
+  .option('verbose', {
+    alias: ['v'],
     describe: 'Shows detailed operations',
     boolean: true,
   })
-  .option('s', {
-    alias: 'settings',
+  .option('settings', {
+    alias: 's',
     describe: 'Set a predefined setting',
   });
 

@@ -15,36 +15,36 @@ exports.aliases = ['b'];
 exports.desc = 'Process files from a directory and store results';
 
 exports.builder = (yargs) => yargs
-  .option('H', {
-    alias: ['header', 'headers'],
+  .option('header', {
+    alias: ['H', 'headers'],
     describe: 'Add a header to the request',
     coerce: coerceHeaders,
   })
-  .option('s', {
-    alias: 'settings',
+  .option('settings', {
+    alias: 's',
     describe: 'Set a predefined setting',
   })
-  .option('r', {
-    alias: 'recursive',
+  .option('recursive', {
+    alias: 'r',
     describe: 'Look for log files into subdirectories',
     boolean: true,
   })
-  .option('d', {
-    alias: 'download',
+  .option('download', {
+    alias: 'd',
     describe: 'Download a file from the job directory',
   })
-  .option('f', {
-    alias: ['force', 'overwrite'],
+  .option('force', {
+    alias: ['f', 'overwrite'],
     describe: 'Overwrite existing files',
     boolean: true,
   })
-  .option('v', {
-    alias: ['verbose'],
+  .option('verbose', {
+    alias: ['v'],
     describe: 'Shows detailed operations',
     boolean: true,
   })
-  .option('l', {
-    alias: 'list',
+  .option('list', {
+    alias: 'l',
     describe: 'Only list log files in the directory',
     boolean: true,
   });
