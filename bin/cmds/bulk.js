@@ -146,6 +146,8 @@ exports.handler = async (argv) => {
 
       processHasError = true;
 
+      logger.verbose(`Job failed (ID: ${job.id || 'n/a'})`);
+
       const res = e.response || {};
       const ezpaarseMessage = res && res.headers && res.headers['ezpaarse-status-message'];
       logger.error(`The job failed with status ${res.status || 'N/A'} ${res.statusText || 'N/A'}`);
