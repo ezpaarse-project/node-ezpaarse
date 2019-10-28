@@ -280,17 +280,22 @@ async function removeRelatedFiles(directory, filename) {
 }
 
 /**
- * Validate a report,
+ * Validate a report
  * @param {Object} report
  */
 function validateReport(report) {
-  if (!report.general) {
+  const { general } = report;
+
+  if (!general) {
     return new Error('general section is missing');
   }
-  if (report.general['Job-Done'] !== true) {
+  if (general['status-message']) {
+    return new Error(`job failed with message "${general['status-message']}"`);
+  }
+  if (general['Job-Done'] !== true) {
     return new Error('invalid Job-Done value, the job may have been interrupted');
   }
-  if (Number.isNaN(parseInt(report.general['nb-ecs'], 10))) {
+  if (Number.isNaN(parseInt(general['nb-ecs'], 10))) {
     return new Error('nb-ecs is either missing or is not a number');
   }
   return null;
