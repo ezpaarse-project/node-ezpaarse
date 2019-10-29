@@ -1,48 +1,52 @@
 const fs = require('fs');
 const path = require('path');
 const ezpaarse = require('../..');
-const { coerceHeaders, coerceDownloads, pick } = require('../../lib/utils');
+const { coerceHeaders, coerceDownloads } = require('../../lib/utils');
 const logger = require('../../lib/logger')({ stdout: process.stderr });
 
 exports.command = 'process [files..]';
 exports.aliases = ['p'];
 exports.desc = 'Process a set of files';
 
-exports.builder = yargs => yargs
-  .option('o', {
-    alias: ['out', 'output'],
+exports.builder = (yargs) => yargs
+  .option('output', {
+    alias: ['out', 'o'],
     describe: 'Output file',
-    coerce: file => path.resolve(file),
+    coerce: (file) => path.resolve(file),
   })
-  .option('H', {
-    alias: ['header', 'headers'],
+  .option('header', {
+    alias: ['headers', 'H'],
     describe: 'Add a header to the request',
     coerce: coerceHeaders,
   })
-  .option('d', {
-    alias: 'download',
+  .option('download', {
+    alias: 'd',
     describe: 'Download a file from the job directory',
     coerce: coerceDownloads,
   })
-  .option('v', {
-    alias: ['verbose'],
+  .option('verbose', {
+    alias: ['v'],
     describe: 'Shows detailed operations',
     boolean: true,
   })
-  .option('s', {
-    alias: 'settings',
+  .option('settings', {
+    alias: 's',
     describe: 'Set a predefined setting',
   });
 
 exports.handler = async (argv) => {
-  const input      = argv.files || process.stdin;
-  const client     = ezpaarse.Client(pick(argv, ['host', 'proxy']));
-  const job        = client.createJob(input, pick(argv, ['settings', 'headers']));
+  const input  = argv.files || process.stdin;
+  const client = ezpaarse.Client({ host: argv.host, proxy: argv.proxy });
+  const job    = client.createJob(input, {
+    settings: argv.settings,
+    headers: argv.headers,
+  });
   const startTime  = process.hrtime();
   const outputFile = argv.output ? path.resolve(argv.output) : null;
-  let hasError   = false;
 
-  const { verbose } = argv;
+  logger.setVerbose(!!argv.verbose);
+
+  let hasError = false;
   let response;
 
   try {
@@ -50,38 +54,47 @@ exports.handler = async (argv) => {
   } catch (e) {
     if (e.code === 'ECONNREFUSED') {
       logger.error(`${e.address}:${e.port} does not respond`);
-    } else {
-      logger.error(e.message);
+      process.exit(1);
     }
+
+    const res = e.response || {};
+    const ezpaarseMessage = res && res.headers && res.headers['ezpaarse-status-message'];
+    logger.error(`The job failed with status ${res.status || 'N/A'} ${res.statusText || 'N/A'}`);
+
+    if (ezpaarseMessage) {
+      logger.error(`ezPAARSE message : ${ezpaarseMessage}`);
+    }
+
     process.exit(1);
   }
 
-  if (verbose) {
-    logger.info(`Job started (ID: ${job.id || 'n/a'})`);
-  }
-
-  if (response.statusCode !== 200) {
-    const ezpaarseMessage = response.headers['ezpaarse-status-message'];
-    logger.error(`The job failed with status ${response.statusCode} ${response.statusMessage}`);
-    if (ezpaarseMessage) { logger.error(`ezPAARSE message : ${ezpaarseMessage}`); }
-    process.exit(1);
-  }
-
-  const output = outputFile ? fs.createWriteStream(outputFile) : process.stdout;
+  logger.verbose(`Job started (ID: ${job.id || 'n/a'})`);
 
   try {
     await new Promise((resolve, reject) => {
-      response.on('end', resolve);
-      response.on('error', reject);
-      response.pipe(output);
+      if (outputFile) {
+        response.data.pipe(fs.createWriteStream(outputFile))
+          .on('error', reject)
+          .on('finish', resolve);
+      } else {
+        response.data.pipe(process.stdout, { end: false });
+        response.data.on('error', reject);
+        response.data.on('end', resolve);
+      }
     });
+
+    if (!response.data.complete) {
+      throw new Error('unexpected disconnection');
+    }
   } catch (e) {
     hasError = true;
     logger.error(`The job has been interrupted : ${e.message}`);
   }
 
   if (argv.download) {
-    for (let { filename, dest } of argv.download) {
+    for (const fileDownload of argv.download) {
+      const { filename } = fileDownload;
+      let { dest } = fileDownload;
 
       if (dest) {
         dest = path.resolve(dest);
@@ -91,12 +104,10 @@ exports.handler = async (argv) => {
         dest = path.resolve(filename);
       }
 
-      if (verbose) {
-        logger.info(`Downloading ${filename} into ${dest}`);
-      }
+      logger.verbose(`Downloading ${filename} into ${dest}`);
 
       try {
-        await download(job, filename, dest);
+        await downloadFile(job, filename, dest);
       } catch (e) {
         hasError = true;
         logger.error(`Failed to download ${filename}`);
@@ -104,10 +115,8 @@ exports.handler = async (argv) => {
     }
   }
 
-  if (verbose) {
-    const elapsed = process.hrtime(startTime)[0];
-    logger.info(`Job terminated in ${elapsed}s`);
-  }
+  const elapsed = process.hrtime(startTime)[0];
+  logger.verbose(`Job terminated in ${elapsed}s`);
 
   process.exit(hasError ? 1 : 0);
 };
@@ -118,14 +127,15 @@ exports.handler = async (argv) => {
  * @param {string} filename the file to download
  * @param {string} dest the place to store the file to
  */
-function download(job, filename, dest) {
-  return new Promise((resolve, reject) => {
-    if (!job.id) {
-      reject(new Error('Job has no ID'));
-      return;
-    }
+async function downloadFile(job, filename, dest) {
+  if (!job.id) {
+    return Promise.reject(new Error('Job has no ID'));
+  }
 
-    job.download(filename)
+  const response = await job.download(filename);
+
+  return new Promise((resolve, reject) => {
+    response.data
       .pipe(fs.createWriteStream(dest))
       .on('error', reject)
       .on('finish', resolve);

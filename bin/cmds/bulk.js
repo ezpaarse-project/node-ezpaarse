@@ -4,7 +4,6 @@ const ezpaarse = require('../..');
 const logger = require('../../lib/logger')();
 const {
   coerceHeaders,
-  pick,
   findInDir,
   isDir,
 } = require('../../lib/utils');
@@ -15,48 +14,49 @@ exports.command = 'bulk <sourceDir> [destDir]';
 exports.aliases = ['b'];
 exports.desc = 'Process files from a directory and store results';
 
-exports.builder = yargs => yargs
-  .option('H', {
-    alias: ['header', 'headers'],
+exports.builder = (yargs) => yargs
+  .option('header', {
+    alias: ['H', 'headers'],
     describe: 'Add a header to the request',
     coerce: coerceHeaders,
   })
-  .option('s', {
-    alias: 'settings',
+  .option('settings', {
+    alias: 's',
     describe: 'Set a predefined setting',
   })
-  .option('r', {
-    alias: 'recursive',
+  .option('recursive', {
+    alias: 'r',
     describe: 'Look for log files into subdirectories',
     boolean: true,
   })
-  .option('d', {
-    alias: 'download',
+  .option('download', {
+    alias: 'd',
     describe: 'Download a file from the job directory',
   })
-  .option('f', {
-    alias: ['force', 'overwrite'],
+  .option('force', {
+    alias: ['f', 'overwrite'],
     describe: 'Overwrite existing files',
     boolean: true,
   })
-  .option('v', {
-    alias: ['verbose'],
+  .option('verbose', {
+    alias: ['v'],
     describe: 'Shows detailed operations',
     boolean: true,
   })
-  .option('l', {
-    alias: 'list',
+  .option('list', {
+    alias: 'l',
     describe: 'Only list log files in the directory',
     boolean: true,
   });
 
 exports.handler = async (argv) => {
-  const client      = ezpaarse.Client(pick(argv, ['host', 'proxy']));
-  const sourceDir   = path.resolve(argv.sourceDir);
-  const destDir     = path.resolve(argv.destDir || argv.sourceDir);
-  const { verbose } = argv;
+  const client    = ezpaarse.Client({ host: argv.host, proxy: argv.proxy });
+  const sourceDir = path.resolve(argv.sourceDir);
+  const destDir   = path.resolve(argv.destDir || argv.sourceDir);
 
-  let hasError = false;
+  logger.setVerbose(!!argv.verbose);
+
+  let processHasError = false;
 
   if (!await isDir(sourceDir)) {
     logger.error(`Not a directory: ${sourceDir}`);
@@ -67,7 +67,7 @@ exports.handler = async (argv) => {
     process.exit(1);
   }
 
-  const files = (await findInDir(sourceDir, argv.recursive)).filter(f => logReg.test(f.name));
+  const files = (await findInDir(sourceDir, argv.recursive)).filter((f) => logReg.test(f.name));
 
   if (files.length === 0) {
     logger.info('No log files found');
@@ -75,7 +75,7 @@ exports.handler = async (argv) => {
   }
 
   if (argv.list) {
-    files.forEach(f => console.log(f.path));
+    files.forEach((f) => console.log(f.path));
     return;
   }
 
@@ -87,109 +87,150 @@ exports.handler = async (argv) => {
 
   const elapsed = process.hrtime(startTime)[0];
 
-  if (verbose) {
-    logger.info(`Terminated in ${elapsed}s`);
-  }
+  logger.verbose(`Terminated in ${elapsed}s`);
 
-  process.exit(hasError ? 1 : 0);
+  process.exit(processHasError ? 1 : 0);
 
   async function processFile(file) {
+    const isGzip       = /\.gz$/i.test(file.name);
     const resultDir    = path.resolve(destDir, path.relative(sourceDir, path.dirname(file.path)));
     const resultFile   = path.resolve(resultDir, file.name.replace(logReg, '.ec.csv'));
-    const resultFileGz = path.resolve(resultDir, file.name.replace(logReg, '.ec.csv.gz'));
-    const reportFile   = path.resolve(resultDir, file.name.replace(logReg, '.report.html'));
+    const reportFile   = path.resolve(resultDir, file.name.replace(logReg, '.report.json'));
+    const resultFileGz = `${resultFile}.gz`;
+    const tmpFile      = `${resultFile}.tmp`;
     const koFile       = `${resultFile}.ko`;
 
     if (await fs.pathExists(resultFile) && !argv.overwrite) {
-      if (verbose) { logger.info(`Skipping ${resultFile}`); }
+      logger.verbose(`Skipping ${resultFile}`);
       return;
     }
     if (await fs.pathExists(resultFileGz) && !argv.overwrite) {
-      if (verbose) { logger.info(`Skipping ${resultFileGz}`); }
+      logger.verbose(`Skipping ${resultFileGz}`);
       return;
     }
 
     logger.info(`Processing ${file.path}`);
 
     try {
-      await removeRelatedFiles(resultDir, file.name, verbose);
+      await fs.ensureDir(resultDir);
     } catch (e) {
-      logger.error(`Failed to remove related files : ${e.message}`);
-      hasError = true;
+      logger.error(`Failed to create ${resultDir}`);
+      processHasError = true;
       return;
     }
 
     try {
-      await fs.ensureDir(resultDir);
+      await removeRelatedFiles(resultDir, file.name);
     } catch (e) {
-      logger.error(`Failed to create ${resultDir}`);
-      hasError = true;
+      logger.error(`Failed to remove related files : ${e.message}`);
+      processHasError = true;
       return;
     }
 
-    const job = client.createJob(fs.createReadStream(file.path), pick(argv, ['settings', 'headers']));
+    const { headers = {}, settings } = argv;
+
+    if (isGzip && !headers['content-encoding']) {
+      headers['content-encoding'] = 'gzip';
+    }
+
+    const job = client.createJob(fs.createReadStream(file.path), { headers, settings });
     let response;
 
     try {
       response = await job.start();
     } catch (e) {
-      hasError = true;
-
       if (e.code === 'ECONNREFUSED') {
         logger.error(`${e.address}:${e.port} does not respond`);
         process.exit(1);
-      } else {
-        logger.error(e.message);
-        return;
       }
-    }
 
-    if (verbose) {
-      logger.info(`Job started (ID: ${job.id || 'n/a'})`);
-    }
+      processHasError = true;
 
-    if (response.statusCode !== 200) {
-      hasError = true;
+      logger.verbose(`Job failed (ID: ${job.id || 'n/a'})`);
 
-      const ezpaarseMessage = response.headers['ezpaarse-status-message'];
-      logger.error(`The job failed with status ${response.statusCode} ${response.statusMessage}`);
+      const res = e.response || {};
+      const ezpaarseMessage = res && res.headers && res.headers['ezpaarse-status-message'];
+      logger.error(`The job failed with status ${res.status || 'N/A'} ${res.statusText || 'N/A'}`);
 
       if (ezpaarseMessage) {
         logger.error(`ezPAARSE message : ${ezpaarseMessage}`);
       }
 
       try {
-        await download(job, 'job-report.html', reportFile);
-      } catch (e) {
-        logger.error(`Failed to download report file : ${e.message}`);
+        logger.verbose(`Downloading ${path.basename(reportFile)}`);
+        await downloadFile(job, 'job-report.json', reportFile);
+      } catch (err) {
+        logger.error(`Failed to download report file : ${err.message}`);
       }
-
       return;
     }
 
+    logger.verbose(`Job started (ID: ${job.id || 'n/a'})`);
+
+    let lineCount = 0;
+    let jobHasError = false;
+
     try {
       await new Promise((resolve, reject) => {
-        response.pipe(fs.createWriteStream(resultFile))
+        response.data.pipe(fs.createWriteStream(tmpFile))
           .on('error', reject)
           .on('finish', resolve);
+
+        let buffer = '';
+        response.data.on('data', (chunk) => {
+          buffer += chunk.toString();
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop();
+          lineCount += lines.filter((l) => l.trim()).length;
+        });
       });
-    } catch (e) {
-      hasError = true;
 
-      logger.error(`The job has been interrupted : ${e.message}`);
-
-      try {
-        await fs.move(resultFile, koFile, { overwrite: true });
-      } catch (err) {
-        logger.warning(`Failed to rename the result file : ${err.message}`);
+      if (!response.data.complete) {
+        throw new Error('unexpected disconnection');
       }
+    } catch (e) {
+      processHasError = true;
+      jobHasError = true;
+      logger.error(`The job has been interrupted : ${e.message}`);
     }
 
     try {
-      await download(job, 'job-report.html', reportFile);
+      logger.verbose(`Downloading ${path.basename(reportFile)}`);
+      await downloadFile(job, 'job-report.json', reportFile);
     } catch (e) {
-      hasError = true;
-      logger.error('Failed to download report file');
+      processHasError = true;
+      jobHasError = true;
+      logger.error(`Failed to download report file : ${e.message}`);
+    }
+
+    logger.verbose('Validating report file');
+
+    let report;
+    try {
+      report = JSON.parse(await fs.readFile(reportFile, 'utf8'));
+    } catch (e) {
+      processHasError = true;
+      jobHasError = true;
+      logger.error(`Cannot read ${path.basename(reportFile)} : ${e.message}`);
+    }
+
+    if (report) {
+      const error = validateReport(report);
+
+      if (error) {
+        processHasError = true;
+        jobHasError = true;
+        logger.error(`Report validation failed : ${error.message}`);
+      } else {
+        const ecCount = report.general['nb-ecs'];
+
+        // Compare EC count with line count (without header line)
+        if ((lineCount - 1) !== ecCount) {
+          processHasError = true;
+          jobHasError = true;
+          logger.error(`File length (${lineCount} lines) does not match job report (${ecCount} ECs)`);
+        }
+      }
     }
 
     if (argv.download) {
@@ -198,17 +239,26 @@ exports.handler = async (argv) => {
       for (const jobFile of downloads) {
         const jobFileDest = path.resolve(resultDir, file.name.replace(logReg, `.${jobFile}`));
         try {
-          await download(job, jobFile, jobFileDest);
+          logger.verbose(`Downloading ${jobFile}`);
+          await downloadFile(job, jobFile, jobFileDest);
         } catch (e) {
-          hasError = true;
-          logger.error(`Failed to download ${jobFile}`);
+          processHasError = true;
+          jobHasError = true;
+          logger.error(`Failed to download ${jobFile} : ${e.message}`);
         }
       }
     }
 
-    if (verbose) {
-      logger.info('Job terminated');
+    try {
+      await fs.move(tmpFile, jobHasError ? koFile : resultFile, { overwrite: true });
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        processHasError = true;
+        logger.error(`Failed to rename ${path.basename(tmpFile)} to ${processHasError ? '.ko' : '.csv'} : ${err.message}`);
+      }
     }
+
+    logger.verbose('Job terminated');
   }
 };
 
@@ -216,17 +266,39 @@ exports.handler = async (argv) => {
  * Remove all files with a name based on the given log file
  * @param {string} logFile path to a log file
  */
-async function removeRelatedFiles(directory, filename, verbose) {
+async function removeRelatedFiles(directory, filename) {
   const basename = filename.replace(logReg, '');
 
   const files = (await findInDir(directory))
-    .filter(f => f.name.startsWith(basename))
-    .filter(f => !logReg.test(f.name));
+    .filter((f) => f.name.startsWith(basename))
+    .filter((f) => !logReg.test(f.name));
 
   for (const file of files) {
-    if (verbose) { logger.info(`Removing ${file.name}`); }
+    logger.verbose(`Removing ${file.name}`);
     await fs.remove(file.path);
   }
+}
+
+/**
+ * Validate a report
+ * @param {Object} report
+ */
+function validateReport(report) {
+  const { general } = report;
+
+  if (!general) {
+    return new Error('general section is missing');
+  }
+  if (general['status-message']) {
+    return new Error(`job failed with message "${general['status-message']}"`);
+  }
+  if (general['Job-Done'] !== true) {
+    return new Error('invalid Job-Done value, the job may have been interrupted');
+  }
+  if (Number.isNaN(parseInt(general['nb-ecs'], 10))) {
+    return new Error('nb-ecs is either missing or is not a number');
+  }
+  return null;
 }
 
 /**
@@ -235,14 +307,15 @@ async function removeRelatedFiles(directory, filename, verbose) {
  * @param {string} filename the file to download
  * @param {string} dest the place to store the file to
  */
-function download(job, filename, dest) {
-  return new Promise((resolve, reject) => {
-    if (!job.id) {
-      reject(new Error('Job has no ID'));
-      return;
-    }
+async function downloadFile(job, filename, dest) {
+  if (!job.id) {
+    return Promise.reject(new Error('Job has no ID'));
+  }
 
-    job.download(filename)
+  const response = await job.download(filename);
+
+  return new Promise((resolve, reject) => {
+    response.data
       .pipe(fs.createWriteStream(dest))
       .on('error', reject)
       .on('finish', resolve);
