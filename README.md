@@ -82,3 +82,18 @@ Process files in `sourceDir` and save results in `destDir`. If `destDir` is not 
   # Activating reject files and downloading unqualified log lines along results
   ezp bulk -r ezproxy-logs/ ezproxy-results/ -H "Reject-Files: all" --download lines-unqualified-ecs.log
 ```
+
+### ezp download \<id\> <files..>
+Download one or more files from the directory of the job with the given `id`.
+
+#### Options
+No options
+
+#### Examples
+```bash
+  # Downloading job-report.json into the current directory
+  ezp download 897efb30-f96e-11e9-9997-cd438c1e39d2 job-report.json
+  
+  # Downloading job-traces.log with a custom name
+  ezp download 897efb30-f96e-11e9-9997-cd438c1e39d2 job-traces.log:897efb30-traces.log
+```
