@@ -62,7 +62,7 @@ exports.handler = async (argv) => {
     logger.error(`Not a directory: ${sourceDir}`);
     process.exit(1);
   }
-  if (!await isDir(destDir)) {
+  if (!await isDir(destDir, { ignoreNotFound: true })) {
     logger.error(`Not a directory: ${destDir}`);
     process.exit(1);
   }
