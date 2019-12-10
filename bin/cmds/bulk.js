@@ -250,6 +250,7 @@ exports.handler = async (argv) => {
     }
 
     try {
+      await fs.ensureFile(tmpFile);
       await fs.move(tmpFile, jobHasError ? koFile : resultFile, { overwrite: true });
     } catch (err) {
       if (err.code !== 'ENOENT') {
