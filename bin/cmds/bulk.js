@@ -225,7 +225,7 @@ exports.handler = async (argv) => {
         const ecCount = report.general['nb-ecs'];
 
         // Compare EC count with line count (without header line)
-        if ((lineCount - 1) !== ecCount) {
+        if (ecCount > 0 && (lineCount - 1) !== ecCount) {
           processHasError = true;
           jobHasError = true;
           logger.error(`File length (${lineCount} lines) does not match job report (${ecCount} ECs)`);
