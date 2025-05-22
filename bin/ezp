@@ -10,6 +10,10 @@ yargs
     describe: 'ezPAARSE server hostname (ex: demo.ezpaarse.org)',
     global: true,
   })
+  .option('protocol', {
+    describe: 'protocol used to connect to the ezPAARSE server (ex: http)',
+    global: true,
+  })
   .option('proxy', {
     alias: 'p',
     describe: 'a proxy server to use',

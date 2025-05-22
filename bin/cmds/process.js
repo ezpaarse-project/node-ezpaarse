@@ -36,7 +36,7 @@ exports.builder = (yargs) => yargs
 
 exports.handler = async (argv) => {
   const input  = argv.files || process.stdin;
-  const client = ezpaarse.Client({ host: argv.host, proxy: argv.proxy });
+  const client = ezpaarse.Client({ protocol: argv.protocol, host: argv.host, proxy: argv.proxy });
   const job    = client.createJob(input, {
     settings: argv.settings,
     headers: argv.headers,

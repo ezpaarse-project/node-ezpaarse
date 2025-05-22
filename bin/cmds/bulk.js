@@ -50,7 +50,7 @@ exports.builder = (yargs) => yargs
   });
 
 exports.handler = async (argv) => {
-  const client    = ezpaarse.Client({ host: argv.host, proxy: argv.proxy });
+  const client    = ezpaarse.Client({ protocol: argv.protocol, host: argv.host, proxy: argv.proxy });
   const sourceDir = path.resolve(argv.sourceDir);
   const destDir   = path.resolve(argv.destDir || argv.sourceDir);
 

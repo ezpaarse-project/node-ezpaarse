@@ -13,6 +13,7 @@ exports.builder = (yargs) => yargs
 
 exports.handler = async (argv) => {
   const client = ezpaarse.Client({
+    protocol: argv.protocol,
     host: argv.host,
     proxy: argv.proxy,
   });
